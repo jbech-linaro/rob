@@ -1,0 +1,18 @@
+{
+	"build": [
+		"repo init -u https://github.com/OP-TEE/manifest.git -m fvp.xml",
+		"repo sync -j3 -d",
+		"cd build && make all -j12"
+		],
+	"clean": ["repo forall -c 'git checkout -f && git clean -xdf'"],
+	"folders": ["/home/joakim.bech/devel/optee_projects/fvp/Foundation_Platformpkg"],
+	"override": {
+		"optee_os": "commit1",
+		"optee_client": "commit"
+	},
+	"reference": "/home/joakim.bech/devel/optee_projects/reference",
+	"repo_xml": "default.xml",
+	"toolchain": "/home/joakim.bech/devel/optee_projects/reference/toolchains",
+	"type": "fvp",
+	"workspace": "/home/joakim.bech/devel/optee_projects/fvp"
+}

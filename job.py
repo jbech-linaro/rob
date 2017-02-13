@@ -26,6 +26,7 @@ class Job(object):
         self.cmds = queue.Queue()
 
     def add_cmd(self, cmd):
+        """Function that adds a command to the command queue"""
         self.cmds.put(cmd + self.get_log_str())
 
     def get_log_str(self, force_append=False):
@@ -38,7 +39,7 @@ class Job(object):
             return " >> %s/%s.txt 2>&1" % (Job.log_folder, self.id)
 
     def run(self):
-        """Start a build job"""
+        """Function that starts executing command in the command queue"""
         rc = 0
         try:
             # Measure the time it takes to run the entire job
@@ -60,7 +61,7 @@ class Job(object):
         return rc
 
     def log(self):
-        """Return the log from a job"""
+        """Returns the log from a job"""
         return
 
     def query(self):
@@ -103,12 +104,12 @@ class Job(object):
 
     def get_toolchains(self):
         """This is a very specific function for OP-TEE, if this should be used
-        in a another more generic setup, this would needs to be re-written.
-        OP-TEE has a make rule that get the toolchain. But since that takes some
-        time and the toolchains in use there seldom change, it save time to just
-        link to a pre-existing folder. This function symlink to the toolchain
-        stated in the json file if it was stated, otherwise it run the OP-TEE
-        make command to get the toolchain"""
+        in a another more generic setup, this would need to be re-written.
+        OP-TEE has a make rule that gets the toolchains. But since that takes
+        some time and the toolchains in use there, seldomly changes, it saves
+        time to just link to a pre-existing folder. This function symlinks to
+        the toolchain stated in the json file if it was stated, otherwise it run
+        the OP-TEE make command to get the toolchain"""
         if self.toolchain is None:
             self.add_cmd("cd build && make toolchains -j3")
         else:
@@ -116,6 +117,8 @@ class Job(object):
                 self.workspace))
 
     def log_time(self, message, start, end):
+        """Function that calculates hour, minutes and second and log that
+        together with a message to the build log file"""
         m, s = divmod(end - start, 60)
         h, m = divmod(m, 60)
         cmd = "echo '%s: %sh %sm %ss'%s" % (message, h, m, round(s, 2), self.get_log_str(True))
@@ -123,6 +126,7 @@ class Job(object):
         output = subprocess.check_call(cmd, shell=True)
 
     def add_build_cmds(self):
+        """Function that adds all build commands to the build queue"""
         if self.build_cmds is None:
             print("add_build_cmds: No build commands")
             return
@@ -148,15 +152,11 @@ class Job(object):
         return
 
     def url(self):
-        """Return the log from a job"""
-        return
-
-    def workspace(self, path):
-        """Return the log from a job"""
-        self.workspace = path
+        """Return URL to the job information"""
         return
 
     def parse_json(self):
+        """Function that parses a JSON configuration file"""
         with open(self.json_file) as json_data:
             d = json.load(json_data)
             if "build" in d:
@@ -201,29 +201,12 @@ class Job(object):
             else:
                 print("Error: 'workspace' is mandatory in the json file")
 
-class Rpi3(Job):
-    def __init__(self, id):
-        """Raspberry Pi3 class that initialize the job queue"""
-        super().__init__(id, "/home/joakim.bech/devel/optee_projects/rpi3")
-        self.jobtype = "rpi3"
-        # FIXME: All this could go into "config-files" instead of hardcoding it
-        # here.
-        if os.path.exists(self.workspace + "/.repo"):
-            self.add_cmd("repo forall -c 'git checkout -f && git clean -xdf'")
-        self.add_cmd("repo init -u https://github.com/OP-TEE/manifest.git -m %s.xml --reference %s" % (self.jobtype, Job.reference_folder))
-        self.add_cmd("repo sync -j3 -d")
-        self.add_cmd("ln -sf %s/toolchains %s/toolchains" % (Job.reference_folder, self.workspace))
-        self.add_cmd("cd build && make all -j12")
-
-    def __str__(self):
-        return "I'm a %s class" % self.jobtype
-
 def test():
     qemu = Job(1, "./json/qemu.json")
     qemu.start()
 
-    #rpi3 = Rpi3(2)
-    #rpi3.build()
+    rpi3 = Job(2, "./json/rpi3.json")
+    rpi3.start()
 
     fvp = Job(3, "./json/fvp.json")
     fvp.start()

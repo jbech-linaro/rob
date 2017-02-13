@@ -1,9 +1,11 @@
 #!/usr/bin/python3
 
 import json
+import logging
 import os
 import queue
 import subprocess
+import sys
 import time
 
 class Job(object):
@@ -47,14 +49,14 @@ class Job(object):
 
             while not self.cmds.empty():
                 cmd = self.cmds.get()
-                print("\n>>>>> Running cmd: '%s'" % cmd)
+                logging.debug(">>>>> Running cmd: '%s'" % cmd)
                 output = subprocess.check_call(cmd, cwd=self.workspace, shell=True)
-                print("<<<<< output cmd: '%s'" % output)
+                logging.debug("<<<<< output cmd: '%s'" % output)
 
             self.log_time("Total build time", start, time.time())
         except subprocess.CalledProcessError:
-            print("Something went wrong, bail out ...")
-            rc = 1
+            loggin.error("Something went wrong, bail out ...")
+            sys.exit(1)
         finally:
             while not self.cmds.empty():
                 self.cmds.get()
@@ -66,13 +68,13 @@ class Job(object):
 
     def query(self):
         """Query an ongoing job"""
-        print("Job ID: %s" % self.id)
+        logging.debug("Job ID: %s" % self.id)
         return
 
     def add_clean_cmds(self):
         """Function that takes care of all commands related to cleaning"""
         if self.clean_cmds is None:
-            print("add_clean_cmds: No clean commands")
+            logging.debug("add_clean_cmds: No clean commands")
             return
 
         for cmd in self.clean_cmds:
@@ -80,23 +82,23 @@ class Job(object):
             # must explicitly check for existance before trying to do so.
             if "repo" in cmd:
                 if os.path.exists(self.workspace + "/.repo"):
-                    print("Found repo clean .. %s" % cmd)
+                    logging.debug("Found repo clean .. %s" % cmd)
                     self.add_cmd(cmd)
             else:
-                print("cleaning .. %s" % cmd)
+                logging.debug("cleaning .. %s" % cmd)
                 self.add_cmd(cmd)
 
     def create_folders(self):
         """Function that creates all folders that are expected"""
         if self.workspace is None:
-            print("Error: We must have a workspace")
-            return
+            logging.error("We must have a workspace")
+            sys.exit(1)
 
         cmd = "mkdir -p %s%s" % (self.workspace, self.get_log_str())
         output = subprocess.check_call(cmd, shell=True)
 
         if self.folders is None:
-            print("create_folders: No folder to create")
+            logging.debug("create_folders: No folder to create")
             return
 
         for folder in self.folders:
@@ -122,13 +124,13 @@ class Job(object):
         m, s = divmod(end - start, 60)
         h, m = divmod(m, 60)
         cmd = "echo '%s: %sh %sm %ss'%s" % (message, h, m, round(s, 2), self.get_log_str(True))
-        print(cmd)
+        logging.debug(cmd)
         output = subprocess.check_call(cmd, shell=True)
 
     def add_build_cmds(self):
         """Function that adds all build commands to the build queue"""
         if self.build_cmds is None:
-            print("add_build_cmds: No build commands")
+            logging.debug("add_build_cmds: No build commands")
             return
 
         for cmd in self.build_cmds:
@@ -161,47 +163,51 @@ class Job(object):
             d = json.load(json_data)
             if "build" in d:
                 self.build_cmds = d['build']
-                print(self.build_cmds)
+                logging.debug("json.build: %s" % self.build_cmds)
 
             if "clean" in d:
                 self.clean_cmds = d['clean']
-                print(self.clean_cmds)
+                logging.debug("json.clean: %s" % self.clean_cmds)
 
             if "folders" in d:
                 self.folders = d['folders']
-                print(self.folders)
+                logging.debug("json.folders: %s" % self.folders)
 
             if "override" in d:
                 self.override = d['override']
-                print(self.override)
+                logging.debug("json.override: %s" % self.override)
 
             if "reference" in d:
                 self.reference = d['reference']
-                print(self.reference)
+                logging.debug("json.reference: %s" % self.reference)
             else:
-                print("Error: 'reference' is mandatory in the json file")
+                logging.error("'reference' is mandatory in the json file")
+                sys.exit(1)
 
             if "repo_xml" in d:
                 self.repo_xml = d['repo_xml']
-                print(self.repo_xml)
+                logging.debug("json.repo_xml: %s" % self.repo_xml)
             else:
-                print("Error: 'repo_xml' is mandatory in the json file")
+                logging.error("'repo_xml' is mandatory in the json file")
+                sys.exit(1)
 
             if "toolchain" in d:
                 self.toolchain = d['toolchain']
-                print(self.toolchain)
+                logging.debug("json.toolchain: %s" % self.toolchain)
 
             if "type" in d:
                 self.job_type = d['type']
-                print(self.job_type)
+                logging.debug("json.type: %s" % self.job_type)
 
             if "workspace" in d:
                 self.workspace = d['workspace']
-                print(self.workspace)
+                logging.debug("json.workspace: %s" % self.workspace)
             else:
-                print("Error: 'workspace' is mandatory in the json file")
+                logging.error("'workspace' is mandatory in the json file")
+                sys.exit(1)
 
 def test():
+    logging.basicConfig(level=logging.DEBUG)
     qemu = Job(1, "./json/qemu.json")
     qemu.start()
 

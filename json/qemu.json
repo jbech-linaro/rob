@@ -2,10 +2,9 @@
 	"build": [
 		"repo init -u https://github.com/OP-TEE/manifest.git -m default.xml",
 		"repo sync -j3 -d",
-		"cd build && make all -j12"
+		"cd build && make all -j6"
 		],
 	"clean": ["repo forall -c 'git checkout -f && git clean -xdf'"],
-	"folders": ["/tmp/foobar"],
 	"override": {
 		"optee_os": "commit1",
 		"optee_client": "commit"

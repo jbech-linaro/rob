@@ -7,6 +7,7 @@ import queue
 import subprocess
 import sys
 import time
+import threading
 
 class Job(object):
     """This class represents a build job"""
@@ -26,6 +27,7 @@ class Job(object):
         self.job_type = None
         self.override = None
         self.cmds = queue.Queue()
+        self.workspace = None
 
     def add_cmd(self, cmd):
         """Function that adds a command to the command queue"""
@@ -56,7 +58,7 @@ class Job(object):
             self.log_time("Total build time", start, time.time())
         except subprocess.CalledProcessError:
             loggin.error("Something went wrong, bail out ...")
-            sys.exit(1)
+            rc = 1
         finally:
             while not self.cmds.empty():
                 self.cmds.get()
@@ -75,7 +77,7 @@ class Job(object):
         """Function that takes care of all commands related to cleaning"""
         if self.clean_cmds is None:
             logging.debug("add_clean_cmds: No clean commands")
-            return
+            return 0
 
         for cmd in self.clean_cmds:
             # We cannot clean a repo dir if it doesn't exist and therefore we
@@ -87,22 +89,24 @@ class Job(object):
             else:
                 logging.debug("cleaning .. %s" % cmd)
                 self.add_cmd(cmd)
+        return 0
 
     def create_folders(self):
         """Function that creates all folders that are expected"""
         if self.workspace is None:
             logging.error("We must have a workspace")
-            sys.exit(1)
+            return 1
 
         cmd = "mkdir -p %s%s" % (self.workspace, self.get_log_str())
         output = subprocess.check_call(cmd, shell=True)
 
         if self.folders is None:
             logging.debug("create_folders: No folder to create")
-            return
+            return 0
 
         for folder in self.folders:
             self.add_cmd("mkdir -p %s" % folder)
+        return 0
 
     def get_toolchains(self):
         """This is a very specific function for OP-TEE, if this should be used
@@ -117,6 +121,7 @@ class Job(object):
         else:
             self.add_cmd("ln -sf %s %s/toolchains" % (self.toolchain,
                 self.workspace))
+        return 0
 
     def log_time(self, message, start, end):
         """Function that calculates hour, minutes and second and log that
@@ -131,7 +136,7 @@ class Job(object):
         """Function that adds all build commands to the build queue"""
         if self.build_cmds is None:
             logging.debug("add_build_cmds: No build commands")
-            return
+            return 0
 
         for cmd in self.build_cmds:
             # If it's a repo init command and we have specified a reference,
@@ -139,15 +144,23 @@ class Job(object):
             if "repo init" in cmd and self.reference:
                 cmd += " --reference %s" % self.reference
             self.add_cmd(cmd)
+        return 0
 
     def start(self):
         """Function that starts a full build job"""
-        self.parse_json()
-        self.create_folders()
-        self.add_clean_cmds()
-        self.get_toolchains()
-        self.add_build_cmds()
-        self.run()
+        if self.parse_json():
+            return 1
+        if self.create_folders():
+            return 1
+        if self.add_clean_cmds():
+            return 1
+        if self.get_toolchains():
+            return 1
+        if self.add_build_cmds():
+            return 1
+        if self.run():
+            return 1
+        return 0
 
     def stop(self):
         """Stop an ongoing job"""
@@ -182,14 +195,14 @@ class Job(object):
                 logging.debug("json.reference: %s" % self.reference)
             else:
                 logging.error("'reference' is mandatory in the json file")
-                sys.exit(1)
+                return 1
 
             if "repo_xml" in d:
                 self.repo_xml = d['repo_xml']
                 logging.debug("json.repo_xml: %s" % self.repo_xml)
             else:
                 logging.error("'repo_xml' is mandatory in the json file")
-                sys.exit(1)
+                return 1
 
             if "toolchain" in d:
                 self.toolchain = d['toolchain']
@@ -204,18 +217,46 @@ class Job(object):
                 logging.debug("json.workspace: %s" % self.workspace)
             else:
                 logging.error("'workspace' is mandatory in the json file")
-                sys.exit(1)
+                return 1
+
+            return 0
+
+    def __str__(self):
+        return "json job file: %s" % self.json_file
+
+def run_job(q):
+    logging.debug("Running a build job")
+    while True:
+        job = q.get()
+        logging.debug(job)
+        job.start()
+        q.task_done()
 
 def test():
-    logging.basicConfig(level=logging.DEBUG)
-    qemu = Job(1, "./json/qemu.json")
-    qemu.start()
+    logging.basicConfig(level=logging.DEBUG,
+            format='[%(levelname)s : %(threadName)-10s] %(message)s')
+    start = time.time()
+    job_queue = queue.Queue()
+    nbr_threads = 3
 
-    rpi3 = Job(2, "./json/rpi3.json")
-    rpi3.start()
+    for i in range(nbr_threads):
+        worker = threading.Thread(target=run_job, args=(job_queue,))
+        worker.setDaemon(True)
+        worker.start()
 
-    fvp = Job(3, "./json/fvp.json")
-    fvp.start()
+    jobs = [Job(1, "./json/qemu.json"),
+            Job(2, "./json/rpi3.json"),
+            Job(3, "./json/fvp.json")]
+
+    for j in jobs:
+        job_queue.put(j)
+
+    job_queue.join()
+
+    m, s = divmod(time.time() - start, 60)
+    h, m = divmod(m, 60)
+    logging.debug("Total run time for all jobs: %sh %sm %ss" %
+            (h, m, round(s, 2)))
 
 if __name__ == "__main__":
     test()

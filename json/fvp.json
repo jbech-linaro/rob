@@ -2,7 +2,7 @@
 	"build": [
 		"repo init -u https://github.com/OP-TEE/manifest.git -m fvp.xml",
 		"repo sync -j3 -d",
-		"cd build && make all -j12"
+		"cd build && make all -j6"
 		],
 	"clean": ["repo forall -c 'git checkout -f && git clean -xdf'"],
 	"folders": ["/home/joakim.bech/devel/optee_projects/fvp/Foundation_Platformpkg"],
